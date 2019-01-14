@@ -15,7 +15,7 @@ sampwidth=2
 modulator_file = wave.open("vocals.wav", 'r')
 carrier_file = wave.open("synth.wav", 'r')
 
-nframes = min(modulator_file.getnframes(), carrier_file.getnframes()) // 10
+nframes = min(modulator_file.getnframes(), carrier_file.getnframes())
 
 sample_size = 64
 overlap_factor = 16
@@ -29,7 +29,7 @@ modulator_buffer = []
 carrier_buffer = []
 output_samples = []
 
-gaussian_kernel = signal.gaussian(sample_size, 4)
+gaussian_kernel = signal.gaussian(sample_size, 2)
 hanning_kernel = np.hanning(sample_size)
 
 output_file = wave.open("output.wav", 'w')
@@ -51,6 +51,21 @@ def butter_bandpass_filter(data, lowcut, highcut, fs, order=5):
 def sigmoid(x):
     return 1 / (1 + math.exp(-x))
 
+low_freq = 80
+high_freq = 12000
+bins = 16
+
+scaling_factor = 1 / 32767
+GAIN = 1000
+
+filters = []
+
+# print(np.abs(modulator_sample_fft))
+for x in range(bins):
+    bin_low = math.pow(2, (x / bins) * math.log2(high_freq - low_freq)) + low_freq
+    bin_high = math.pow(2, (x + 1) / bins * math.log2(high_freq - low_freq)) + low_freq
+    filters.append(butter_bandpass(bin_low, bin_high, modulator_file.getframerate(), order=2))
+
 for i in range(0, nframes):
     modulator_data = struct.unpack("<1h", modulator_file.readframes(1))
     carrier_data = struct.unpack("<1h", carrier_file.readframes(1))
@@ -62,49 +77,22 @@ for i in range(0, nframes):
         print(int(i / nframes * 100))
 
     if len(modulator_buffer) == sample_size:
-        modulator_sample_fft = np.fft.fft(np.multiply(modulator_buffer, hanning_kernel))
-        # modulator_sample_fft = np.fft.fft(modulator_buffer)
-        # carrier_sample = np.multiply(carrier_buffer[0:sample_size], hanning_kernel)
-        carrier_sample = carrier_buffer[:]
-        # carrier_sample_fft = np.fft.fft(np.multiply(carrier_buffer[0:sample_size], hanning_kernel))
-
-        # band_filter = np.multiply(modulator_sample_fft, 1/32767/4)
-        low_freq = 80
-        high_freq = 12000
-        bins = 16
-
         sample = np.zeros(sample_size)
-        scaling_factor = 1 / 32767
-        # scaling_factor = 1 / 1000
+        for b, a in filters:
+            modulator_band_signal = signal.lfilter(b, a, modulator_buffer)
+            scale = math.sqrt(np.average(np.square(modulator_band_signal * scaling_factor)))
+            # scale = sigmoid(10 * (np.average(np.abs(np.multiply(modulator_band_signal, hanning_kernel))) - 0.5))
+            # scale = 1
+            carrier_band_signal = signal.lfilter(b, a, carrier_buffer)
+            sample = np.add(sample, np.multiply(carrier_band_signal, scale))
 
-        # print(np.abs(modulator_sample_fft))
-        for x in range(bins):
-            bin_low = math.pow(10, x / bins * math.log10(high_freq - low_freq)) + low_freq
-            bin_high = math.pow(10, (x + 1) / bins * math.log10(high_freq - low_freq)) + low_freq
-            bin_mid = math.pow(10, (math.log10(bin_high) + math.log10(bin_low)) / 2)
+        sample = np.multiply(sample, GAIN)
 
-            scale = 0
-            # if x == 0:
-                # scale = abs(modulator_sample_fft[x]) * scaling_factor
+        # sample_peak = np.max(np.abs(sample))
+        # modulator_peak = np.max(np.abs(modulator_buffer)) * GAIN
 
-            # if scale == 0:
-                # next
-            for y in range(len(modulator_sample_fft)):
-                # nth bin has frequency n * sample frequency * num dft points
-                frequency = (y + 0.5) * modulator_file.getframerate() / len(modulator_sample_fft)
-                # print(frequency)
-                contribution = math.exp(-abs(frequency - bin_mid) / 1000)
-                scale += contribution * abs(modulator_sample_fft[y]) * scaling_factor
-            # print('bin ' + str(x) + ': ' + str(scale))
-
-            # data = np.clip(np.add(np.multiply(carrier_sample, scaling_factor / 2), 0.5), 0, 1)
-            # filtered = butter_bandpass_filter(data, bin_low, bin_high, modulator_file.getframerate(), order=3)
-            # sample = np.add(sample, np.multiply(np.add(filtered, -0.5), scale * scaling_factor))
-
-            filtered = butter_bandpass_filter(carrier_sample, bin_low, bin_high, modulator_file.getframerate(), order=3)
-            # filtered = carrier_sample
-            sample = np.add(sample, np.multiply(filtered, scale))
-
+        # if sample_peak > 0:
+            # sample = np.multiply(sample, modulator_peak / sample_peak)
 
         ##### Uncomment for unvoiced parts
         # zero_crossing = 0
@@ -125,28 +113,6 @@ for i in range(0, nframes):
         for _ in range(num_overlap):
             modulator_buffer.pop(0)
             carrier_buffer.pop(0)
-
-        """
-        for x in range(len(modulator_sample_fft) // bin_size):
-            frequency = (x * bin_size) * modulator_file.getframerate() / len(modulator_sample_fft) / bin_size
-            if i == sample_size:
-                print("Bin " + str(x) + ": " + str(frequency) + "Hz")
-
-            avg = 0
-            if frequency < 2000:
-                for offset in range(bin_size):
-                    avg = avg + band_filter[x * bin_size + offset] / bin_size
-            for offset in range(bin_size):
-                band_filter[x * bin_size + offset] = avg
-
-
-        if i == sample_size:
-            print(band_filter)
-
-        # output_fft = carrier_sample_fft
-        output_fft = np.multiply(band_filter, carrier_sample_fft)
-        # output_samples.append(np.fft.ifft(output_fft))
-        """
 
         if len(output_samples) == overlap_factor:
             output = np.zeros(num_overlap)
