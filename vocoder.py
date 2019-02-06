@@ -94,19 +94,18 @@ for i in range(0, nframes):
         # if sample_peak > 0:
             # sample = np.multiply(sample, modulator_peak / sample_peak)
 
-        ##### Uncomment for unvoiced parts
-        # zero_crossing = 0
-        # power = 0
-        # for x in range(len(modulator_buffer)-1):
-            # if modulator_buffer[x] * modulator_buffer[x + 1] < 0:
-                # zero_crossing = zero_crossing + 1
+        zero_crossing = 0
+        power = 0
+        for x in range(len(modulator_buffer)-1):
+            if modulator_buffer[x] * modulator_buffer[x + 1] < 0:
+                zero_crossing = zero_crossing + 1
 
-        # for amplitude in modulator_buffer:
-            # power += (amplitude * scaling_factor) ** 2 / len(modulator_buffer)
+        for amplitude in modulator_buffer:
+            power += (amplitude * scaling_factor) ** 2 / len(modulator_buffer)
 
-        # unvoiced_level = sigmoid((power - 0.001) * 10000) * sigmoid(-(power - 0.01) * 1000) * 10
-        # noise = np.random.normal(0, 1, size=len(sample))
-        # sample = np.add(sample, np.multiply(noise, unvoiced_level))
+        unvoiced_level = sigmoid((power - 0.001) * 10000) * sigmoid(-(power - 0.01) * 1000) * zero_crossing
+        noise = np.random.normal(0, 1, size=len(sample))
+        sample = np.add(sample, np.multiply(noise, unvoiced_level))
 
         output_samples.append(np.multiply(sample, gaussian_kernel))
 
