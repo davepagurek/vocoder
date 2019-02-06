@@ -2,6 +2,11 @@
 
 This project is a proof-of-concept that takes a modulator wave (e.g. a human voice) and applies it to a carrier wave (e.g. a synthesizer) to produce a <a href="https://en.wikipedia.org/wiki/Talk_box">Talkbox</a>-type sound.
 
+<table>
+  <tr><td><img src="https://github.com/davepagurek/vocoder/blob/master/img/spectrogram.png?raw=true" /></td></tr>
+  <tr><td><i>The carrier (synthesizer), modulator (voice), and output signals, shown as spectrograms in Audacity.</small></i></tr>
+</table>
+
 ## Method
 
 The modulator and carrier singles are processed one window at a time. Windows are processed, and an output window is produced. The output wave is formed by adding all these output windows together. Each window overlaps with the previous window by a factor *n*, so at any given time, there are *n* windows contributing to the sound of the output wave. When the output windows are added together, a Gaussian kernel is applied so that the ends of the window taper off and you don't hear artifacts when a window starts and ends.
